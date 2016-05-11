@@ -7,13 +7,14 @@ from tornado import gen, web
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 
-alreadyPMd = []
+alreadySent = [] #store
 
-interests = ["elon", "musk", "tesla", "space x", "google", "facebook", "syria"]
-
-user_agent = "test script by /u/brwnkid88"
+interests = {'trump':['brwnkid88']}
+user_agent = "PMInterestingLinks 0.0.1 by /u/brwnkid88"
 r = praw.Reddit(user_agent = user_agent)
 
+#This handles getting oauth token, or refreshing it
+#credit goes to x89 on github https://github.com/x89/Shreddit/blob/master/get_secret.py
 class Page(web.RequestHandler):
     def get(self):
         code = self.get_argument("code", default=None, strip=False)
@@ -55,21 +56,38 @@ else:
 
 subreddit = r.get_subreddit('all')
 while True:
-	for submission in subreddit.get_hot(limit=25):
-		hasInterst = any(word in submission.title.lower() for word in interests)
-		if submission.id not in alreadyPMd and hasInterst:
-			message = submission.title + "\n" + submission.url
-			r.send_message('brwnkid88', 'Alert', message)
-			alreadyPMd.append(submission.id)
+    print("running...")
 
-	for msg in r.get_unread(limit=None):
-		subj = msg.subject.lower()
-		text = msg.body.lower().split(',')
-		if (subj == "stop"):
-			for i in text:
-				interests.remove(i)
-		elif(subj== "start"):
-			for i in text:
-				interests.append(i)
+    for msg in r.get_unread(limit=None):
+        subj = msg.subject.lower()
+        text = msg.body.lower().split(',')
+        if (subj == "stop"):
+            for i in text:
+                if i not in interests:
+                    continue
+                print("interest removed")
+                interests[i].remove(msg.author)
+        elif(subj== "start"):
+            for i in text:
+                if i not in interests:
+                    interests[i] = set()
+                print("interest added")
+                interests[i].add(msg.author)
+        msg.mark_as_read()
 
-	time.sleep(60) #checks every minute for updates to r/all
+    for submission in subreddit.get_hot(limit=25):
+        for word in interests:
+            if word in submission.title.lower():
+                message = submission.title + "\n" + submission.url
+                for user in interests[word]:
+                    if (str(user) + submission.id) not in alreadySent:
+                        r.send_message(user, 'Alert', message)
+                        print("PM Sent")
+                        alreadySent.append(str(user) + submission.id)
+
+    #puges read list if it starts to get too long. Should make this faster
+    if len(alreadySent) > 500:
+        print("purging...")
+        alreadySent = alreadySent[-100:]
+    print("waiting...")    
+    time.sleep(60) #checks every minute for updates to r/all
