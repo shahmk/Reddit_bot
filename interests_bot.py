@@ -8,8 +8,8 @@ from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 
 alreadySent = [] #store
-
-interests = {'trump':['brwnkid88']}
+waitTime = 60
+interests = {}
 user_agent = "PMInterestingLinks 0.0.1 by /u/brwnkid88"
 r = praw.Reddit(user_agent = user_agent)
 
@@ -89,5 +89,5 @@ while True:
     if len(alreadySent) > 500:
         print("purging...")
         alreadySent = alreadySent[-100:]
-    print("waiting...")    
-    time.sleep(60) #checks every minute for updates to r/all
+    print("waiting...")
+    time.sleep(waitTime) #checks every minute for updates to r/all
