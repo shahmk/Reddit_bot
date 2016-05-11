@@ -1,5 +1,11 @@
-#Interests_Bot for Reddit
+# Interests_Bot for Reddit
+This is bot that is similar to Google alerts, but for Reddit.
 
-- This bot will look at r/all for the top 25 links under the hot subheading every 60 seconds and PM the links, if they contain a keyword that is in your interests list.
+## Usage
+Bot reddit name is /u/iPMlinks
 
-- The interests can be updated by sending a PM to the bot with a subject of "stop" or "start" and the body containing whatever keyword(s) you want to stop or start separated by a comma.
+1. Add interests by PMing the bot with subject of 'start' and put the keywords you're interested in in the body, separated by commas.
+2. Remove interests by PMing the bot with subject of 'stop' and put the keywords you're want to stop receiving messages for in in the body, separated by commas.
+
+## Credits
+The code for oAuth token was taken form https://github.com/x89, he was nice enough to provide this file (https://github.com/x89/Shreddit/blob/master/get_secret.py) for anyone to use in order to get a token.
