@@ -8,7 +8,7 @@ from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 
 alreadySent = [] #store
-waitTime = 60
+waitTime = 60 #60 second wait time between refreshes
 interests = {}
 user_agent = "PMInterestingLinks 0.0.1 by /u/brwnkid88"
 r = praw.Reddit(user_agent = user_agent)
@@ -55,25 +55,27 @@ else:
 
 
 subreddit = r.get_subreddit('all')
+print("running...")
 while True:
-    print("running...")
-
     for msg in r.get_unread(limit=None):
+        msg.mark_as_read()
         subj = msg.subject.lower()
         text = msg.body.lower().split(',')
         if (subj == "stop"):
             for i in text:
                 if i not in interests:
                     continue
-                print("interest removed")
+                #print("user removed")
                 interests[i].remove(msg.author)
+                if len(interests[i])==0:
+                    #print("interest completely removed")
+                    del interests[i]
         elif(subj== "start"):
             for i in text:
                 if i not in interests:
                     interests[i] = set()
-                print("interest added")
+                #print("user added")
                 interests[i].add(msg.author)
-        msg.mark_as_read()
 
     for submission in subreddit.get_hot(limit=25):
         for word in interests:
@@ -89,5 +91,5 @@ while True:
     if len(alreadySent) > 500:
         print("purging...")
         alreadySent = alreadySent[-100:]
-    print("waiting...")
+    #print("waiting...")
     time.sleep(waitTime) #checks every minute for updates to r/all
