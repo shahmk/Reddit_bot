@@ -1,16 +1,38 @@
 #!/usr/bin/python3
 import praw
 import time
+import json
 import webbrowser
+from peewee import *
 from praw.errors import HTTPException, OAuthAppRequired
 from tornado import gen, web
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 
+db = SqliteDatabase('user.db')
+
+class BaseModel(Model):
+	class Meta:
+		database = db
+
+class User(BaseModel):
+	username = CharField(unique=True)
+	interests = TextField()
+
+db.connect()
+db.create_tables([User],safe=True)
+
+def addUser(user, ints):
+	User.create(username=user,interests=ints)
+
+def updateInterest(user, ints):
+	q = User.update(interests=ints).where(User.username==user)
+	q.execute()
+
 alreadySent = [] #store
 waitTime = 60 #60 second wait time between refreshes
-interests = {}
-user_agent = "PMInterestingLinks 0.0.1 by /u/brwnkid88"
+usersInterest = {}
+user_agent = "PMInterestingLinks 0.2.0 by /u/brwnkid88"
 r = praw.Reddit(user_agent = user_agent)
 
 #This handles getting oauth token, or refreshing it
@@ -36,7 +58,7 @@ class Page(web.RequestHandler):
 application = web.Application([(r"/", Page)])
 
 try:
-    r.refresh_access_information()
+	r.refresh_access_information()
 except HTTPException:
     url = r.get_authorize_url('uniqueKey', ['identity', 'privatemessages','read','vote','history'], True)
     try:
@@ -49,47 +71,71 @@ except HTTPException:
     IOLoop.current().start()
 
 if r.user == None:
-    print("Failed to log in. Something went wrong!")
+	print("Failed to log in. Something went wrong!")
 else:
-    print("Logged in as %s." % r.user)
-
+	print("Logged in as %s." % r.user)
 
 subreddit = r.get_subreddit('all')
-print("running...")
+
+def loadUsers():
+	print("Loading user database...")
+	for user in User.select():
+		print (user.username + ": " + user.interests)
+		usersInterest[user.username] = json.loads(user.interests)
+
+def checkMessages():
+	for msg in r.get_unread(limit=None):
+		usr = str(msg.author)
+		subj = msg.subject.lower()
+		text = msg.body.lower().split(',')
+		if (subj == "stop"):
+			if usr not in usersInterest:
+				usersInterest[usr] = []
+				addUser(usr,json.dumps(usersInterest[usr]))
+			for word in text:
+				print(usr + " removed " + word)
+				usersInterest[usr].remove(word.strip(' ,.'))
+				updateInterest(usr,json.dumps(usersInterest[usr]))
+		elif(subj == "start"):
+			if usr not in usersInterest:
+				usersInterest[usr] = []
+				addUser(usr,json.dumps(usersInterest[usr]))
+			for word in text:
+				print(usr + " added " + word)
+				usersInterest[usr].append(word.strip(' ,.'))
+				updateInterest(usr,json.dumps(usersInterest[usr]))
+		elif(subj == "get"):
+			message = "Your Subscribed to alerts for: \n"
+			if usr in usersInterest:
+				for i in usersInterest[usr]:
+					message = message + i + "\n"
+			else:
+				message = "You aren't subscribed to any alerts"
+			r.send_message(usr,'Subscriptions',message)
+		msg.mark_as_read()
+
+def sendPMs():
+	for submission in subreddit.get_hot(limit=25):
+		for user in usersInterest:
+			has_interest =  any(word in submission.title.lower() for word in usersInterest[user])
+			if  has_interest and (str(user) + submission.id) not in alreadySent :
+				message = submission.title + "\n" + submission.url
+				sub = 'Interest Alert'
+				r.send_message(user,sub,message)
+				print("Sent " + user + " a PM")
+				alreadySent.append(str(user) + submission.id) 
+
+#loads database if it's existing into local dictionary
+loadUsers()
+
 while True:
-    for msg in r.get_unread(limit=None):
-        msg.mark_as_read()
-        subj = msg.subject.lower()
-        text = msg.body.lower().split(',')
-        if (subj == "stop"):
-            for i in text:
-                if i not in interests:
-                    continue
-                #print("user removed")
-                interests[i].remove(msg.author)
-                if len(interests[i])==0:
-                    #print("interest completely removed")
-                    del interests[i]
-        elif(subj== "start"):
-            for i in text:
-                if i not in interests:
-                    interests[i] = set()
-                #print("user added")
-                interests[i].add(msg.author)
+	print("running...")
+	checkMessages()
+	sendPMs()
 
-    for submission in subreddit.get_hot(limit=25):
-        for word in interests:
-            if word in submission.title.lower():
-                message = submission.title + "\n" + submission.url
-                for user in interests[word]:
-                    if (str(user) + submission.id) not in alreadySent:
-                        r.send_message(user, 'Alert', message)
-                        print("PM Sent")
-                        alreadySent.append(str(user) + submission.id)
-
-    #puges read list if it starts to get too long. Should make this faster
-    if len(alreadySent) > 500:
-        print("purging...")
-        alreadySent = alreadySent[-100:]
-    #print("waiting...")
-    time.sleep(waitTime) #checks every minute for updates to r/all
+  #purges read list if it starts to get too long. Should make this faster
+	if len(alreadySent) > 500:
+		print("purging...")
+		alreadySent = alreadySent[-100:]
+	#print("waiting...")
+	time.sleep(waitTime) #checks every minute for updates to r/all
